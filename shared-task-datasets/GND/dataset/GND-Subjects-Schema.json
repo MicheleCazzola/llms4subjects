@@ -20,7 +20,7 @@
 			"type": "string"
 		},
 		"Alternate Name": {
-			"description": "The synonyms/aternate names for this subject - Code: 450 - Field: a",
+			"description": "The synonyms/alternate names for this subject - Code: 450 - Field: a",
 			"type": "array",
 			"items": {
 				"type": "string"

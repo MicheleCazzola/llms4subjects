@@ -1,1 +1,5 @@
 __pycache__/
+venv/
+.idea/
+bert_similarity_tagging_results/*/
+tag_embeddings.json
