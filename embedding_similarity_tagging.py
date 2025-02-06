@@ -7,12 +7,12 @@ from sentence_transformers import SentenceTransformer, util
 
 GND_TAGS_FILE = "shared-task-datasets/GND/dataset/GND-Subjects-tib-core.json"
 TEST_DOCS_DIR = "shared-task-datasets/TIBKAT/tib-core-subjects/data/dev"  # Subfolders: train, dev, test
-RESULTS_DIR = "bert_similarity_tagging_results/dev"
+RESULTS_DIR = "results/dev"
 
 MODEL_NAME = "distiluse-base-multilingual-cased-v1"  # Multilingual SentenceTransformer model
 TAG_EMBEDDINGS_FILE = f"tag_embeddings_{MODEL_NAME}.json"
 TOP_K = 50  # Number of top similar tags to retrieve for each document
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Use GPU if available
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Use GPU if available
 
 
 def load_gnd_tags(gnd_file):
@@ -32,23 +32,53 @@ def load_gnd_tags(gnd_file):
 
 def create_tag_description(tag):
     """
-    Create a textual description from a tag using fields from the JSON schema.
+    Create a detailed textual description from a GND subject record using fields from the JSON schema.
 
     Args:
-        tag (dict): A dictionary representing a tag.
+        tag (dict): A dictionary representing a GND subject.
 
     Returns:
-        str: A textual description of the tag.
+        str: A structured textual description of the subject.
     """
     parts = []
-    if "preferredName" in tag:
-        parts.append(f"Name: {tag['preferredName']}.")
-    if "scopeNote" in tag:
-        parts.append(f"Description: {tag['scopeNote']}.")
-    if "broader" in tag and tag["broader"]:
-        broader_terms = ", ".join(tag["broader"])
-        parts.append(f"Broader terms: {broader_terms}.")
-    return " ".join(parts)
+
+    # Include the GND code
+    if tag.get("Code") and tag["Code"].strip():
+        parts.append(f"GND Code: {tag['Code']}.")
+
+    # Include the classification details
+    if tag.get("Classification Number") and tag["Classification Number"].strip():
+        parts.append(f"Classification Number: {tag['Classification Number']}.")
+    if tag.get("Classification Name") and tag["Classification Name"].strip():
+        parts.append(f"Classification Name: {tag['Classification Name']}.")
+
+    # Include the subject's main name
+    if tag.get("Name") and tag["Name"].strip():
+        parts.append(f"Subject Name: {tag['Name']}.")
+
+    # Include alternate names if present
+    if tag.get("Alternate Name") and isinstance(tag["Alternate Name"], list) and any(tag["Alternate Name"]):
+        alternate_names = ", ".join(filter(None, tag["Alternate Name"]))
+        if alternate_names:
+            parts.append(f"Alternate Names: {alternate_names}.")
+
+    # Include related subjects if present
+    if tag.get("Related Subjects") and isinstance(tag["Related Subjects"], list) and any(tag["Related Subjects"]):
+        related_subjects = ", ".join(filter(None, tag["Related Subjects"]))
+        if related_subjects:
+            parts.append(f"Related Subjects: {related_subjects}.")
+
+    # Include source information if present
+    if tag.get("Source") and tag["Source"].strip():
+        parts.append(f"Source: {tag['Source']}.")
+    if tag.get("Source URL") and tag["Source URL"].strip():
+        parts.append(f"Source URL: {tag['Source URL']}.")
+
+    # Include a formal definition if present
+    if tag.get("Definition") and tag["Definition"].strip():
+        parts.append(f"Definition: {tag['Definition']}.")
+
+    return "\n".join(parts)  # Combine all parts into a single description string
 
 
 def prepare_tag_embeddings(model, tags):
@@ -86,28 +116,55 @@ def prepare_tag_embeddings(model, tags):
 
 def extract_text_from_jsonld(doc_json):
     """
-    Extract a text string from a JSON-LD document.
+    Extract a summarized text template from a JSON-LD document.
+
+    Processes each item in the JSON-LD '@graph' list and extracts specific fields (e.g. title, abstract, description).
+    For list values, the elements are joined using '. ' as a separator.
+    Any value that looks like a link or contains an internal identifier (e.g., "gnd:") is skipped.
 
     Args:
         doc_json (dict): A dictionary representing a JSON-LD document.
 
     Returns:
-        str: Extracted text from the document.
+        str: A formatted string with the extracted information.
     """
-    parts = []
+
+    # Mapping of JSON field names to human-readable labels
+    fields = ["title", "abstract", "description", "subject", "creator", "contributor", "publisher", "issued"]
+
+    def clean(text):
+        """Strip and validate a text value, skipping links and internal IDs."""
+        if not isinstance(text, str):
+            text = str(text)
+        text = text.strip()
+        if not text or text.startswith("http://") or text.startswith("https://") or "gnd:" in text:
+            return None
+        return text
+
+    summary_lines = []
+
+    # Process each item in the JSON-LD graph
     for item in doc_json.get("@graph", []):
-        fields = ["title", "abstract", "description"]
-
         for field in fields:
-            if field in item:
-                value = item[field]
-                # If the attribute is a list, join the elements.
-                # This may happen for example if Abstract is multiline
-                if isinstance(value, list):
-                    value = " ".join(value)
-                parts.append(value)
+            if field not in item:
+                continue
 
-    return " ".join(parts).strip()
+            raw_value = item[field]
+            if isinstance(raw_value, list):  # Clean and join list elements
+                values = [clean(elem) for elem in raw_value]
+                values = [v for v in values if v]
+                if not values:
+                    continue
+                value = ", ".join(values)
+            else:
+                value = clean(raw_value)
+                if not value:
+                    continue
+
+            # Add the field and value to the summary
+            summary_lines.append(f"{field.capitalize()}: {value}")
+
+    return "\n".join(summary_lines)
 
 
 def get_all_doc_files(root_dir):
@@ -196,8 +253,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Create folders if they don't exist
-    os.makedirs(args.results_dir, exist_ok=True)
-    os.makedirs(os.path.dirname(args.tag_embeddings_file), exist_ok=True)
+    if os.path.dirname(args.results_dir):
+        os.makedirs(args.results_dir, exist_ok=True)
+    if os.path.dirname(args.tag_embeddings_file):
+        os.makedirs(os.path.dirname(args.tag_embeddings_file), exist_ok=True)
 
     # Load the SentenceTransformer model
     print("Loading model...")
