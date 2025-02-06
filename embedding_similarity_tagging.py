@@ -9,9 +9,8 @@ GND_TAGS_FILE = "shared-task-datasets/GND/dataset/GND-Subjects-tib-core.json"
 TEST_DOCS_DIR = "shared-task-datasets/TIBKAT/tib-core-subjects/data/dev"  # Subfolders: train, dev, test
 RESULTS_DIR = "bert_similarity_tagging_results/dev"
 
-TAG_EMBEDDINGS_FILE = "tag_embeddings.json"
-
 MODEL_NAME = "distiluse-base-multilingual-cased-v1"  # Multilingual SentenceTransformer model
+TAG_EMBEDDINGS_FILE = f"tag_embeddings_{MODEL_NAME}.json"
 TOP_K = 50  # Number of top similar tags to retrieve for each document
 
 
@@ -128,7 +127,7 @@ def get_all_doc_files(root_dir):
     return doc_files
 
 
-def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K):
+def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K, results_dir=RESULTS_DIR):
     """
     Tag documents with the most similar GND tags.
 
@@ -138,6 +137,7 @@ def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K):
         tag_embeddings (Tensor): Embeddings of the tags.
         test_docs_dir (str): Directory containing the test documents.
         top_k (int, optional): Number of top similar tags to retrieve for each document. Defaults to TOP_K.
+        results_dir (str, optional): Directory to save the tagging results. Defaults to RESULTS_DIR.
 
     Returns:
         dict: A dictionary where keys are document file paths and values are lists of top similar tags with their scores.
@@ -175,7 +175,7 @@ def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K):
         doc_result = { "dcterms:subject": [tag_ids[idx] for idx in top_results] }
 
         # Save the results in a new JSON file, in the subfolder <RESULTS_DIR>/<original path>/<original filename>.json
-        output_filename = os.path.join(RESULTS_DIR, os.path.relpath(os.path.dirname(doc_file), test_docs_dir), os.path.splitext(os.path.basename(doc_file))[0] + ".json")
+        output_filename = os.path.join(results_dir, os.path.relpath(os.path.dirname(doc_file), test_docs_dir), os.path.splitext(os.path.basename(doc_file))[0] + ".json")
         os.makedirs(os.path.dirname(output_filename), exist_ok=True)
         with open(output_filename, "w", encoding="utf-8") as f:
             json.dump(doc_result, f, ensure_ascii=False, indent=2)
@@ -185,12 +185,18 @@ def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K):
 
 # --- Main Script ---
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='LLMs4Subjects Solution: Tagging documents via BERT embeddings & cosine similarity')
+    parser = argparse.ArgumentParser(description='LLMs4Subjects Solution: Tagging documents via embeddings & cosine similarity')
     parser.add_argument('--tags_file', type=str, default=GND_TAGS_FILE, help='Path to the JSON file containing GND tags to use for tagging.')
     parser.add_argument('--docs_path', type=str, default=TEST_DOCS_DIR, help='Path to the directory containing the JSON-LD documents.')
     parser.add_argument('--model_name', type=str, default=MODEL_NAME, help='Name of the SentenceTransformer model to use.')
     parser.add_argument('--top_k', type=int, default=TOP_K, help='Number of top similar tags to retrieve for each document.')
+    parser.add_argument('--results_dir', type=str, default=RESULTS_DIR, help='Directory to save the tagging results.')
+    parser.add_argument('--tag_embeddings_file', type=str, default=TAG_EMBEDDINGS_FILE, help='Path to the file to save/load tag embeddings.')
     args = parser.parse_args()
+
+    # Create folders if they don't exist
+    os.makedirs(args.results_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(args.tag_embeddings_file), exist_ok=True)
 
     # Load the SentenceTransformer model
     print("Loading model...")
@@ -198,18 +204,11 @@ if __name__ == "__main__":
 
     # Load and process the GND tags
     print("Loading GND tags...")
+    TAG_EMBEDDINGS_FILE = args.tag_embeddings_file
     tags = load_gnd_tags(args.tags_file)
     tag_ids, tag_texts, tag_embeddings = prepare_tag_embeddings(model, tags)
 
     # Process documents, compute similarities, and save results
     print("Processing test documents and computing similarities...")
-    tag_documents(model, tag_ids, tag_embeddings, args.docs_path, args.top_k)
+    tag_documents(model, tag_ids, tag_embeddings, args.docs_path, args.top_k, args.results_dir)
     print("Tagging complete. Individual results saved in corresponding files.")
-
-    """ Then test the results with the evaluation script
-    python shared-task-eval-script/llms4subjects-evaluation.py \
-                                        --team_name=PoliTo \
-                                        --true_labels_dir=shared-task-datasets/TIBKAT/tib-core-subjects/data/dev \
-                                        --pred_labels_dir=bert_similarity_tagging_results/dev \
-                                        --results_dir=bert_similarity_tagging_results
-    """
