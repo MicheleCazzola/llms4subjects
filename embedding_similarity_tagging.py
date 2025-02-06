@@ -1,7 +1,7 @@
 import os
 import json
+import torch
 import argparse
-import numpy as np
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer, util
 
@@ -12,6 +12,7 @@ RESULTS_DIR = "bert_similarity_tagging_results/dev"
 MODEL_NAME = "distiluse-base-multilingual-cased-v1"  # Multilingual SentenceTransformer model
 TAG_EMBEDDINGS_FILE = f"tag_embeddings_{MODEL_NAME}.json"
 TOP_K = 50  # Number of top similar tags to retrieve for each document
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Use GPU if available
 
 
 def load_gnd_tags(gnd_file):
@@ -65,7 +66,7 @@ def prepare_tag_embeddings(model, tags):
     if os.path.exists(TAG_EMBEDDINGS_FILE):
         with open(TAG_EMBEDDINGS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            return data["tag_ids"], data["tag_texts"], np.array(data["tag_embeddings"], dtype=np.float32)
+            return data["tag_ids"], data["tag_texts"], torch.tensor(data["tag_embeddings"], dtype=torch.float32, device=DEVICE)
 
     tag_texts = []
     tag_ids = []
@@ -75,7 +76,7 @@ def prepare_tag_embeddings(model, tags):
         tag_ids.append(tag.get("Code", tag.get("Name", "unknown")))  # Add the tag ID to the list
 
     print("Encoding tag descriptions...")
-    tag_embeddings = model.encode(tag_texts, convert_to_tensor=False, show_progress_bar=True, dtype=np.float32)
+    tag_embeddings = model.encode(tag_texts, convert_to_tensor=True, show_progress_bar=True, dtype=torch.float32, device=DEVICE)
 
     with open(TAG_EMBEDDINGS_FILE, "w", encoding="utf-8") as f:
         json.dump({ "tag_ids": tag_ids, "tag_texts": tag_texts, "tag_embeddings": tag_embeddings.tolist() }, f, ensure_ascii=False, indent=2)
@@ -160,16 +161,16 @@ def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K, re
             continue
 
         # Encode the document text
-        doc_embedding = model.encode(doc_text, convert_to_tensor=False, dtype=np.float32)
+        doc_embedding = model.encode(doc_text, convert_to_tensor=True, dtype=torch.float32, device=DEVICE)
 
         # Compute cosine similarity between the document and all tag embeddings
         cos_scores = util.cos_sim(doc_embedding, tag_embeddings)[0]
 
         # Get the top_k tags (indices)
-        top_results = np.argpartition(-cos_scores.cpu().numpy(), range(top_k))[:top_k]
+        top_results = torch.topk(cos_scores, top_k).indices
 
         # Sort them by similarity score
-        top_results = top_results[np.argsort(-cos_scores.cpu().numpy()[top_results])]
+        top_results = top_results[torch.argsort(-cos_scores[top_results])]
 
         # Store the results
         doc_result = { "dcterms:subject": [tag_ids[idx] for idx in top_results] }
@@ -201,6 +202,7 @@ if __name__ == "__main__":
     # Load the SentenceTransformer model
     print("Loading model...")
     model = SentenceTransformer(args.model_name)
+    model.to(DEVICE)
 
     # Load and process the GND tags
     print("Loading GND tags...")
