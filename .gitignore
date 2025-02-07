@@ -1,6 +1,7 @@
 __pycache__/
 venv/
 .idea/
+.ipynb_checkpoints/
 tag_embeddings.json
 
 # Results
