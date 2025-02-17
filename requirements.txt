@@ -1,4 +1,6 @@
-sentence-transformers
 tqdm
 pandas
 torch
+wandb
+sentence-transformers
+transformers[torch]
