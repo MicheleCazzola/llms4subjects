@@ -2,5 +2,6 @@ tqdm
 pandas
 torch
 wandb
-sentence-transformers
+datasets
+sentence-transformers[train]
 transformers[torch]
