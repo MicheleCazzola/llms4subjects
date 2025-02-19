@@ -10,6 +10,9 @@ from torch.utils.data import DataLoader
 from sentence_transformers import SentenceTransformer, losses, SentenceTransformerTrainer, SentenceTransformerTrainingArguments
 from sentence_transformers.trainer import WandbCallback
 from embedding_similarity_tagging import load_gnd_tags, create_tag_description, get_all_doc_files, extract_text_from_jsonld
+import torch.nn as nn
+from transformers import AutoModel
+import torch.nn.utils.prune as prune
 
 
 def extract_ground_truth_subjects(doc_json: str) -> list:
@@ -129,6 +132,47 @@ def load_dataset(input_file: str) -> Dataset:
     with open(input_file, "r") as f:
         return Dataset.from_dict(json.load(f))
 
+# From https://github.com/huggingface/peft/issues/41#issuecomment-1404611868
+def print_trainable_parameters(model):
+    """
+    Prints the number of trainable parameters in the model.
+    """
+    trainable_params = 0
+    all_param = 0
+    for _, param in model.named_parameters():
+        all_param += param.numel()
+        if param.requires_grad:
+            trainable_params += param.numel()
+    print(
+        f"trainable params: {trainable_params} || all params: {all_param} || trainable: {100 * trainable_params / all_param:.2f}%"
+    )
+class LoRA(nn.Module):
+    def __init__(self, original_layer, rank=8):
+        super(LoRA, self).__init__()
+        self.original_layer = original_layer
+        self.rank = rank
+        self.in_features = original_layer.in_features
+        self.out_features = original_layer.out_features
+
+        # Initialize the Low-rank matrices A and B
+        self.A = nn.Parameter(torch.zeros(self.in_features, rank))
+        self.B = nn.Parameter(torch.randn(size=(rank, self.out_features)))
+
+    def forward(self, x):
+        # The output is the original layer output plus the low-rank adaptation
+
+        # LoRA output
+        lora_output = torch.matmul(x, self.A)
+        lora_output = torch.matmul(lora_output, self.B)
+
+        # layer output, which combines the original output with the LoRA one 
+        return self.original_layer(x) + lora_output
+def apply_lora(module):
+    for name, child in module.named_children():
+        if isinstance(child, nn.Linear):
+            setattr(module, name, LoRA(child))
+        else:
+            apply_lora(child)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fine-tune a SentenceTransformer on training data for subject tagging")
@@ -139,11 +183,41 @@ if __name__ == "__main__":
     parser.add_argument('--output_model_path', type=str, default="finetuned_model", help="Path to save the fine-tuned model")
     parser.add_argument('--batch_size', type=int, default=16, help="Batch size for training")
     parser.add_argument('--num_epochs', type=int, default=1, help="Number of training epochs")
+    parser.add_argument('--PEFT', type=int, default=0, help="Apply PEFT to the model (0: None, 1: LoRA, 2: BitFit)")
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
     print("Loading model...")
     model = SentenceTransformer(args.model_name, device=device)
+    model = model.half()  # Convert model to half precision for faster training
+
+    if args.PEFT !=0:
+        print("Model before PEFT:")
+        print_trainable_parameters(model)
+        if args.PEFT == 1:
+            # Apply LoRA to all layers in the model
+            apply_lora(model)
+            # Freeze all parameters
+            for param in model.parameters():
+                param.requires_grad = False 
+            # Unfreeze only LoRA parameters
+            for layer in model.modules():
+                if isinstance(layer, LoRA):
+                    layer.A.requires_grad = True
+                    layer.B.requires_grad = True
+        elif args.PEFT == 2:
+            # Apply BitFit to all layers in the model
+            for name, param in model.named_parameters():
+                if "bias" in name:
+                    param.requires_grad = True  # Unfreeze bias terms
+                else:
+                    param.requires_grad = False  # Freeze all other parameters
+        else:
+            print("Invalid PEFT option. Exiting.")
+            exit(1)
+        print("Model after PEFT:")
+        print_trainable_parameters(model)
 
     print("Loading GND tags and building mapping...")
     gnd_mapping, all_tag_ids = load_gnd_mapping(args.gnd_tags_file)
@@ -158,7 +232,7 @@ if __name__ == "__main__":
         train_dataset = generate_dataset(args.training_path, gnd_mapping, all_tag_ids)
         save_dataset(train_dataset, train_dataset_file)
     print(f"Created {len(train_dataset)} training examples.")
-
+    
     # ---- Build/Load examples for evaluation ----
     print("Building evaluation examples...")
     eval_dataset_file = "eval_dataset.json"
@@ -183,13 +257,24 @@ if __name__ == "__main__":
         overwrite_output_dir=True,
 
         # Optional tracking/debugging parameters
-        eval_strategy="steps",
-        eval_steps=100,
-        save_strategy="steps",
-        save_steps=100,
-        save_total_limit=4,
+        # eval_strategy="steps",
+        # eval_steps=500,
+        # save_strategy="steps",
+        # save_steps=1000,
+        # save_total_limit=4,
         logging_steps=100,
-        load_best_model_at_end=True
+        # load_best_model_at_end=True,
+        evaluation_strategy="epoch",
+        save_strategy="epoch",
+        save_total_limit=4,
+        load_best_model_at_end=True,
+        
+        # PEFT
+        fp16=False,
+        bf16=True,
+        optim_target_modules=[".*bias.*"] if args.PEFT == 2 else ["query", "key", "value", "dense"],
+        #optim="galore_adamw",
+        #optim_target_modules=["query", "key", "value", "dense"],
     )
 
     # ---- Create a Trainer and run training ----
@@ -199,7 +284,7 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         loss=train_loss,
-        callbacks=[WandbCallback()]  # Init WandB callback for logging
+        #callbacks=[WandbCallback()]  # Init WandB callback for logging
     )
 
     print("Starting fine-tuning...")
