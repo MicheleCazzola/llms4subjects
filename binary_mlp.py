@@ -2,17 +2,24 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from finetune_sentence_transformer import *
-from embedding_similarity_tagging import *
+from sentence_transformers import SentenceTransformer
+from datasets import Dataset
+import os
+from finetune_sentence_transformer import load_gnd_mapping, generate_dataset, save_dataset, load_dataset
+import argparse
 import matplotlib.pyplot as plt
+from binary_classifier import BinaryClassifier
 
 def get_embeddings(embedding_file: str, encoder: SentenceTransformer, data, device) -> Dataset:
     if os.path.exists(embedding_file):
         embedding_dataset = torch.load(embedding_file, weights_only=False)
     else:
         anchors = encoder.encode(data["anchor"], convert_to_tensor=True, dtype=torch.float32, device=device)
+        print("Embedded anchors")
         positives = encoder.encode(data["positive"], convert_to_tensor=True, dtype=torch.float32, device=device)
+        print("Embedded positives")
         negatives = encoder.encode(data["negative"], convert_to_tensor=True, dtype=torch.float32, device=device)
+        print("Embedded negatives")
         embedding_dataset = Dataset.from_dict({ 
             "sentence1": torch.cat([anchors, anchors]),
             "sentence2": torch.cat([positives, negatives]),
@@ -23,36 +30,7 @@ def get_embeddings(embedding_file: str, encoder: SentenceTransformer, data, devi
     return embedding_dataset
 
 
-"""## Model"""
-class BinaryClassifier(nn.Module):
-    def __init__(self, in_features, hidden_dims):
-        super(BinaryClassifier, self).__init__()
 
-        self.in_features = in_features
-        self.hidden_dims = hidden_dims
-
-        self.input = nn.Sequential(
-            nn.Linear(in_features, hidden_dims[0]),
-            nn.ReLU()
-        )
-
-        layers_list = [
-            nn.Sequential(
-                nn.Linear(prev, curr),
-                nn.ReLU()
-            )
-            for prev, curr in zip(hidden_dims[:-1], hidden_dims[1:])
-        ]
-
-        self.layers = nn.Sequential(*layers_list)
-        self.output = nn.Linear(hidden_dims[-1], 1)
-
-    def forward(self, x):
-        out = self.input(x)
-        out = self.layers(out)
-        out = self.output(out)
-
-        return out
 
 """## Evaluate function"""
 
@@ -219,8 +197,8 @@ if __name__ == "__main__":
         criterion,
         optimizer,
         device,
-        train_log_frequency=50,
-        val_log_frequency=3,
+        train_log_frequency=2000,
+        val_log_frequency=500,
         eval_epoch_frequency=1,
         encoder_name=args.model_name
     )
@@ -268,6 +246,7 @@ if __name__ == "__main__":
     """### FLOPS"""
 
     from fvcore.nn import FlopCountAnalysis
+import wandb
 
     flops = FlopCountAnalysis(model, x)
     print(flops.total())'''

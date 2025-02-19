@@ -7,6 +7,6 @@ eval_dataset.json
 train_dataset.json
 wandb
 models
-
+*.pt
 # Tagging results (everything inside "results" and its subfolders with .json extension)
 results/**/*.json

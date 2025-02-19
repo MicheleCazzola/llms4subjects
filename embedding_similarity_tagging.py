@@ -4,6 +4,7 @@ import torch
 import argparse
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer, util
+from binary_classifier import BinaryClassifier
 
 GND_TAGS_FILE = "shared-task-datasets/GND/dataset/GND-Subjects-tib-core.json"
 TEST_DOCS_DIR = "shared-task-datasets/TIBKAT/tib-core-subjects/data/dev"  # Subfolders: train, dev, test
@@ -185,7 +186,7 @@ def get_all_doc_files(root_dir):
     return doc_files
 
 
-def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K, results_dir=RESULTS_DIR):
+def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K, results_dir=RESULTS_DIR, mlp_model=''):
     """
     Tag documents with the most similar GND tags.
 
@@ -196,6 +197,7 @@ def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K, re
         test_docs_dir (str): Directory containing the test documents.
         top_k (int, optional): Number of top similar tags to retrieve for each document. Defaults to TOP_K.
         results_dir (str, optional): Directory to save the tagging results. Defaults to RESULTS_DIR.
+        mlp_model (str, optional): Path to the MLP model file for tagging. Defaults to ''. If provided, the MLP model will be used for tagging, otherwise cosine similarity will be used.
 
     Returns:
         dict: A dictionary where keys are document file paths and values are lists of top similar tags with their scores.
@@ -220,14 +222,31 @@ def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K, re
         # Encode the document text
         doc_embedding = model.encode(doc_text, convert_to_tensor=True, dtype=torch.float32, device=DEVICE)
 
-        # Compute cosine similarity between the document and all tag embeddings
-        cos_scores = util.cos_sim(doc_embedding, tag_embeddings)[0]
+        if mlp_model=='':
+            # Compute cosine similarity between the document and all tag embeddings
+            cos_scores = util.cos_sim(doc_embedding, tag_embeddings)[0]
 
-        # Get the top_k tags (indices)
-        top_results = torch.topk(cos_scores, top_k).indices
+            # Get the top_k tags (indices)
+            top_results = torch.topk(cos_scores, top_k).indices
 
-        # Sort them by similarity score
-        top_results = top_results[torch.argsort(-cos_scores[top_results])]
+            # Sort them by similarity score
+            top_results = top_results[torch.argsort(-cos_scores[top_results])]
+        else:
+            # Load the MLP model
+            state_dict = torch.load(mlp_model, map_location=DEVICE)
+            IN_FEATURES = tag_embeddings.shape[1] * 2
+            hidden_dimensions = [2 * IN_FEATURES, 2048, 1024]
+            mlp = BinaryClassifier(IN_FEATURES, hidden_dimensions).to(DEVICE)
+            mlp.load_state_dict(state_dict)
+            mlp.eval()
+
+            # Compute the MLP model output
+            with torch.no_grad():
+                input=torch.hstack((doc_embedding.repeat(tag_embeddings.shape[0],1), tag_embeddings))
+                scores=mlp(input)
+            scores=scores.squeeze(1)
+            # Get the top_k tags (indices)
+            top_results = torch.topk(scores, top_k).indices
 
         # Store the results
         doc_result = { "dcterms:subject": [tag_ids[idx] for idx in top_results] }
@@ -250,6 +269,7 @@ if __name__ == "__main__":
     parser.add_argument('--top_k', type=int, default=TOP_K, help='Number of top similar tags to retrieve for each document.')
     parser.add_argument('--results_dir', type=str, default=RESULTS_DIR, help='Directory to save the tagging results.')
     parser.add_argument('--tag_embeddings_file', type=str, default=TAG_EMBEDDINGS_FILE, help='Path to the file to save/load tag embeddings.')
+    parser.add_argument('--mlp_model', type=str, default='', help='Path to the MLP model file for tagging.')
     args = parser.parse_args()
 
     # Create folders if they don't exist
@@ -271,5 +291,5 @@ if __name__ == "__main__":
 
     # Process documents, compute similarities, and save results
     print("Processing test documents and computing similarities...")
-    tag_documents(model, tag_ids, tag_embeddings, args.docs_path, args.top_k, args.results_dir)
+    tag_documents(model, tag_ids, tag_embeddings, args.docs_path, args.top_k, args.results_dir, args.mlp_model)
     print("Tagging complete. Individual results saved in corresponding files.")
