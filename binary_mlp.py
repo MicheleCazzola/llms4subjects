@@ -172,8 +172,8 @@ if __name__ == "__main__":
 
     # ---- Get embeddings ----
     print("Getting embeddings...")
-    train_dataset_embedding = get_embeddings("train_embeddings.pt", encoder, train_dataset, device)
-    eval_dataset_embedding = get_embeddings("eval_embeddings.pt", encoder, eval_dataset, device)
+    train_dataset_embedding = get_embeddings(f"{args.model_name}/train_embeddings.pt", encoder, train_dataset, device)
+    eval_dataset_embedding = get_embeddings(f"{args.model_name}/eval_embeddings.pt", encoder, eval_dataset, device)
     print("Embeddings obtained.")
 
     # ---- Adding a MLP on top of the embeddings ----
