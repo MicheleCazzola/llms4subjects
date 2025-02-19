@@ -3,8 +3,10 @@ venv/
 .idea/
 .ipynb_checkpoints/
 tag_embeddings.json
+eval_dataset.json
+train_dataset.json
+wandb
+models
 
-# Results
-results/*/dev
-results/*/train
-results/*/test
+# Tagging results (everything inside "results" and its subfolders with .json extension)
+results/**/*.json
