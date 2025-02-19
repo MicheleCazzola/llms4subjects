@@ -1,6 +1,7 @@
 import json
 import os
-
+import json
+import wandb
 import torch
 import random
 import argparse
@@ -63,8 +64,8 @@ def generate_dataset(docs_dir: str, gnd_mapping: dict, all_tag_ids: list) -> Dat
         docs_dir (str): Directory containing the JSON-LD documents.
         gnd_mapping (dict): Mapping from GND tag codes to their detailed textual descriptions.
         all_tag_ids (list): List of all tag codes.
-
     """
+
     items = []
     doc_files = get_all_doc_files(docs_dir)  # Get all document files in the directory
     print(f"Found {len(doc_files)} documents in {docs_dir}.")
@@ -132,6 +133,7 @@ def load_dataset(input_file: str) -> Dataset:
     with open(input_file, "r") as f:
         return Dataset.from_dict(json.load(f))
 
+
 # From https://github.com/huggingface/peft/issues/41#issuecomment-1404611868
 def print_trainable_parameters(model):
     """
@@ -146,6 +148,8 @@ def print_trainable_parameters(model):
     print(
         f"trainable params: {trainable_params} || all params: {all_param} || trainable: {100 * trainable_params / all_param:.2f}%"
     )
+
+
 class LoRA(nn.Module):
     def __init__(self, original_layer, rank=8):
         super(LoRA, self).__init__()
@@ -165,14 +169,62 @@ class LoRA(nn.Module):
         lora_output = torch.matmul(x, self.A)
         lora_output = torch.matmul(lora_output, self.B)
 
-        # layer output, which combines the original output with the LoRA one 
+        # layer output, which combines the original output with the LoRA one
         return self.original_layer(x) + lora_output
+
+
 def apply_lora(module):
     for name, child in module.named_children():
         if isinstance(child, nn.Linear):
             setattr(module, name, LoRA(child))
         else:
             apply_lora(child)
+
+
+def get_loss(loss_name: str, train_data: Dataset, eval_data: Dataset) -> tuple:
+    """ Get the loss function and update the datasets if necessary.
+    See https://www.sbert.net/docs/package_reference/sentence_transformer/losses.html for details about losses
+
+    Args:
+        loss_name (str): Name of the loss function to use
+        train_data (Dataset): Training dataset containing anchor, positive, and negative examples
+        eval_data (Dataset): Evaluation dataset containing anchor, positive, and negative examples
+
+    Returns:
+        tuple: A tuple with loss function, updated training dataset, and updated evaluation dataset
+    """
+
+    if loss_name == "Triplet":  # Works with triplets of anchor, positive, negative
+        loss = losses.TripletLoss(model=model)
+    elif loss_name == "MultipleNegativesRanking":  # Works with pairs of anchor, positive
+        loss = losses.MultipleNegativesRankingLoss(model=model)
+        train_data = train_data.remove_columns("negative")
+        eval_data = eval_data.remove_columns("negative")
+
+    elif loss_name in ["CosineSimilarity", "coSENT", "AnglE"]:  # Works with 2 sentences as texts, and a "score" corresponding to the expected similarity
+
+        if loss_name == "CosineSimilarity":
+            loss = losses.CosineSimilarityLoss(model=model)
+        elif loss_name == "coSENT":
+            loss = losses.CoSENTLoss(model=model)
+        elif loss_name == "AnglE":
+            loss = losses.AnglELoss(model=model)
+
+        anchors = train_data["anchor"]
+        positives = train_data["positive"]
+        negatives = train_data["negative"]
+        train_data = Dataset.from_dict({ "sentence1": anchors + anchors, "sentence2": positives + negatives, "score": [1.0] * len(anchors) + [0.0] * len(negatives) })
+
+        anchors = eval_data["anchor"]
+        positives = eval_data["positive"]
+        negatives = eval_data["negative"]
+        eval_data = Dataset.from_dict({ "sentence1": anchors + anchors, "sentence2": positives + negatives, "score": [1.0] * len(anchors) + [0.0] * len(negatives) })
+
+    else:
+        raise ValueError(f"Unknown loss function: {loss_name}")
+
+    return loss, train_data, eval_data
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fine-tune a SentenceTransformer on training data for subject tagging")
@@ -184,15 +236,15 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=16, help="Batch size for training")
     parser.add_argument('--num_epochs', type=int, default=1, help="Number of training epochs")
     parser.add_argument('--PEFT', type=int, default=0, help="Apply PEFT to the model (0: None, 1: LoRA, 2: BitFit)")
+    parser.add_argument('--loss', type=str, default="Triplet", help="Loss function to use", choices=["Triplet", "MultipleNegativesRanking", "CosineSimilarity", "coSENT", "AnglE"])
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
     print("Loading model...")
     model = SentenceTransformer(args.model_name, device=device)
-    model = model.half()  # Convert model to half precision for faster training
 
-    if args.PEFT !=0:
+    if args.PEFT != 0:
         print("Model before PEFT:")
         print_trainable_parameters(model)
         if args.PEFT == 1:
@@ -200,7 +252,7 @@ if __name__ == "__main__":
             apply_lora(model)
             # Freeze all parameters
             for param in model.parameters():
-                param.requires_grad = False 
+                param.requires_grad = False
             # Unfreeze only LoRA parameters
             for layer in model.modules():
                 if isinstance(layer, LoRA):
@@ -232,7 +284,7 @@ if __name__ == "__main__":
         train_dataset = generate_dataset(args.training_path, gnd_mapping, all_tag_ids)
         save_dataset(train_dataset, train_dataset_file)
     print(f"Created {len(train_dataset)} training examples.")
-    
+
     # ---- Build/Load examples for evaluation ----
     print("Building evaluation examples...")
     eval_dataset_file = "eval_dataset.json"
@@ -243,11 +295,14 @@ if __name__ == "__main__":
         save_dataset(eval_dataset, eval_dataset_file)
     print(f"Created {len(eval_dataset)} evaluation examples.")
 
+    # ---- Set up the loss function ----
+    train_loss, train_dataset, eval_dataset = get_loss(args.loss, train_dataset, eval_dataset)
+
     # ---- Create the data loader ----
     train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=args.batch_size)
 
     # ---- Set up training arguments ----
-    train_loss = losses.TripletLoss(model)  # Maximize similarity between anchor and positive, minimize similarity between anchor and negative
+    run_name = f"finetune_{args.model_name.split('/')[-1]}_{args.loss}Loss"
 
     training_args = SentenceTransformerTrainingArguments(
         output_dir=args.output_model_path,
@@ -257,24 +312,15 @@ if __name__ == "__main__":
         overwrite_output_dir=True,
 
         # Optional tracking/debugging parameters
-        # eval_strategy="steps",
-        # eval_steps=500,
-        # save_strategy="steps",
-        # save_steps=1000,
-        # save_total_limit=4,
-        logging_steps=100,
-        # load_best_model_at_end=True,
-        evaluation_strategy="epoch",
-        save_strategy="epoch",
+        eval_strategy="steps",
+        eval_steps=1000,
+        save_strategy="steps",
+        save_steps=1000,
         save_total_limit=4,
+        logging_steps=1000,
+        run_name=run_name,  # Name of the WandB run
         load_best_model_at_end=True,
-        
-        # PEFT
-        fp16=False,
-        bf16=True,
         optim_target_modules=[".*bias.*"] if args.PEFT == 2 else ["query", "key", "value", "dense"],
-        #optim="galore_adamw",
-        #optim_target_modules=["query", "key", "value", "dense"],
     )
 
     # ---- Create a Trainer and run training ----
@@ -284,10 +330,11 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         loss=train_loss,
-        #callbacks=[WandbCallback()]  # Init WandB callback for logging
+        # callbacks=[WandbCallback()]  # Init WandB callback for logging
     )
 
     print("Starting fine-tuning...")
     trainer.train()
     model.save(args.output_model_path)
     print(f"Fine-tuning complete. Model saved to {args.output_model_path}.")
+    wandb.finish()  # Finish the WandB run
