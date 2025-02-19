@@ -5,3 +5,5 @@ wandb
 datasets
 sentence-transformers[train]
 transformers[torch]
+fvcore
+matplotlib
