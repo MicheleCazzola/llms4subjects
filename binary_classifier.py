@@ -1,5 +1,6 @@
 import torch.nn as nn
 
+
 class BinaryClassifier(nn.Module):
     def __init__(self, in_features, hidden_dims):
         super(BinaryClassifier, self).__init__()
@@ -10,14 +11,14 @@ class BinaryClassifier(nn.Module):
         self.input = nn.Sequential(
             nn.Linear(in_features, hidden_dims[0]),
             nn.ReLU(),
-            nn.Dropout(0.1)
+            nn.Dropout(0.2)
         )
 
         layers_list = [
             nn.Sequential(
                 nn.Linear(prev, curr),
                 nn.ReLU(),
-                nn.Dropout(0.1)
+                nn.Dropout(0.2)
             )
             for prev, curr in zip(hidden_dims[:-1], hidden_dims[1:])
         ]

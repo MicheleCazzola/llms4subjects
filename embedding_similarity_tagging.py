@@ -186,7 +186,7 @@ def get_all_doc_files(root_dir):
     return doc_files
 
 
-def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K, results_dir=RESULTS_DIR, mlp_model=''):
+def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K, results_dir=RESULTS_DIR, mlp_model='', doc_embeddings_filename=''):
     """
     Tag documents with the most similar GND tags.
 
@@ -206,23 +206,37 @@ def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K, re
     results = { }
     print(f"Found {len(doc_files)} documents in {test_docs_dir}.")
 
-    for doc_file in tqdm(doc_files, desc="Tagging documents"):
-        try:
-            with open(doc_file, "r", encoding="utf-8") as f:
-                doc_json = json.load(f)
-        except Exception as e:
-            print(f"Error reading {doc_file}: {e}")
-            continue
+    doc_files_content = []
 
-        doc_text = extract_text_from_jsonld(doc_json)
-        if not doc_text:
-            print(f"No text found in {doc_file}. Skipping.")
-            continue
+    # If the document embeddings don't exist already, compute them
+    if not os.path.exists(doc_embeddings_filename):
+        for doc_file in tqdm(doc_files, desc="Reading documents"):
+            try:
+                with open(doc_file, "r", encoding="utf-8") as f:
+                    doc_json = json.load(f)
+            except Exception as e:
+                print(f"Error reading {doc_file}: {e}")
+                continue
+
+            doc_text = extract_text_from_jsonld(doc_json)
+            if not doc_text:
+                print(f"No text found in {doc_file}. Skipping.")
+                continue
+            doc_files_content.append(doc_text)
 
         # Encode the document text
-        doc_embedding = model.encode(doc_text, convert_to_tensor=True, dtype=torch.float32, device=DEVICE)
+        print("Encoding documents...")
+        doc_embeddings = model.encode(doc_files_content, convert_to_tensor=True, dtype=torch.float32, device=DEVICE, show_progress_bar=True)
 
-        if mlp_model=='':
+        # Save the document embeddings
+        os.makedirs(os.path.dirname(doc_embeddings_filename), exist_ok=True)
+        torch.save(doc_embeddings, doc_embeddings_filename)
+    else:
+        doc_embeddings = torch.load(doc_embeddings_filename)
+
+    for doc_file, doc_embedding in tqdm(list(zip(doc_files, doc_embeddings)), desc="Tagging documents"):
+
+        if mlp_model == '':
             # Compute cosine similarity between the document and all tag embeddings
             cos_scores = util.cos_sim(doc_embedding, tag_embeddings)[0]
 
@@ -242,9 +256,9 @@ def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K, re
 
             # Compute the MLP model output
             with torch.no_grad():
-                input=torch.hstack((doc_embedding.repeat(tag_embeddings.shape[0],1), tag_embeddings))
-                scores=mlp(input)
-            scores=scores.squeeze(1)
+                input = torch.hstack((doc_embedding.repeat(tag_embeddings.shape[0], 1), tag_embeddings))
+                scores = mlp(input)
+            scores = scores.squeeze(1)
             # Get the top_k tags (indices)
             top_results = torch.topk(scores, top_k).indices
 
@@ -269,6 +283,7 @@ if __name__ == "__main__":
     parser.add_argument('--top_k', type=int, default=TOP_K, help='Number of top similar tags to retrieve for each document.')
     parser.add_argument('--results_dir', type=str, default=RESULTS_DIR, help='Directory to save the tagging results.')
     parser.add_argument('--tag_embeddings_file', type=str, default=TAG_EMBEDDINGS_FILE, help='Path to the file to save/load tag embeddings.')
+    parser.add_argument('--doc_embeddings_file', type=str, default=f"embeddings/{MODEL_NAME}", help='Path to the file to save/load document embeddings.')
     parser.add_argument('--mlp_model', type=str, default='', help='Path to the MLP model file for tagging.')
     args = parser.parse_args()
 
@@ -291,5 +306,5 @@ if __name__ == "__main__":
 
     # Process documents, compute similarities, and save results
     print("Processing test documents and computing similarities...")
-    tag_documents(model, tag_ids, tag_embeddings, args.docs_path, args.top_k, args.results_dir, args.mlp_model)
+    tag_documents(model, tag_ids, tag_embeddings, args.docs_path, args.top_k, args.results_dir, args.mlp_model, args.doc_embeddings_file)
     print("Tagging complete. Individual results saved in corresponding files.")

@@ -188,7 +188,7 @@ if __name__ == "__main__":
     hidden_dimensions = [2 * IN_FEATURES, 2048, 1024]
     model = BinaryClassifier(IN_FEATURES, hidden_dimensions)
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
     model.to(device)
 
     trainloader = DataLoader(train_dataset_embedding, batch_size=args.batch_size, shuffle=True)
