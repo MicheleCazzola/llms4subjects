@@ -9,13 +9,15 @@ class BinaryClassifier(nn.Module):
 
         self.input = nn.Sequential(
             nn.Linear(in_features, hidden_dims[0]),
-            nn.ReLU()
+            nn.ReLU(),
+            nn.Dropout(0.1)
         )
 
         layers_list = [
             nn.Sequential(
                 nn.Linear(prev, curr),
-                nn.ReLU()
+                nn.ReLU(),
+                nn.Dropout(0.1)
             )
             for prev, curr in zip(hidden_dims[:-1], hidden_dims[1:])
         ]
