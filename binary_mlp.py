@@ -10,36 +10,38 @@ import argparse
 import matplotlib.pyplot as plt
 from binary_classifier import BinaryClassifier
 
+
 def get_embeddings(embedding_file: str, encoder: SentenceTransformer, data, device) -> Dataset:
     if os.path.exists(embedding_file):
         embedding_dataset = torch.load(embedding_file, weights_only=False)
     else:
-        anchors = encoder.encode(data["anchor"], convert_to_tensor=True, dtype=torch.float32, device=device)
+        anchors = encoder.encode(data["anchor"], convert_to_tensor=True, dtype=torch.float32, device=device, show_progress_bar=True)
         print("Embedded anchors")
-        positives = encoder.encode(data["positive"], convert_to_tensor=True, dtype=torch.float32, device=device)
+        positives = encoder.encode(data["positive"], convert_to_tensor=True, dtype=torch.float32, device=device, show_progress_bar=True)
         print("Embedded positives")
-        negatives = encoder.encode(data["negative"], convert_to_tensor=True, dtype=torch.float32, device=device)
+        negatives = encoder.encode(data["negative"], convert_to_tensor=True, dtype=torch.float32, device=device, show_progress_bar=True)
         print("Embedded negatives")
-        embedding_dataset = Dataset.from_dict({ 
+        embedding_dataset = Dataset.from_dict({
             "sentence1": torch.cat([anchors, anchors]),
             "sentence2": torch.cat([positives, negatives]),
-            "score": [1.0] * len(positives) + [0.0] * len(negatives) 
+            "score": [1.0] * len(positives) + [0.0] * len(negatives)
         })
-        #json.dump(embedding_dataset, open(embedding_file, "w"))
+
+        # Create folder if it doesn't exist
+        os.makedirs(os.path.dirname(embedding_file), exist_ok=True)
         torch.save(embedding_dataset, embedding_file)
     return embedding_dataset
 
 
-
-
 """## Evaluate function"""
 
+
 def evaluate(
-    model: nn.Module,
-    dataloader: DataLoader,
-    criterion,
-    device: torch.device,
-    log_frequency: int
+        model: nn.Module,
+        dataloader: DataLoader,
+        criterion,
+        device: torch.device,
+        log_frequency: int
 ):
     model.eval()
     steps = 0
@@ -60,26 +62,28 @@ def evaluate(
         eval_loss += loss.item()
 
         if (steps + 1) % log_frequency == 0:
-            print(f"\tValidation: Iteration {steps+1}, Loss: {eval_loss / (steps + 1)}")
+            print(f"\tValidation: Iteration {steps + 1}, Loss: {eval_loss / (steps + 1)}")
 
         steps += 1
 
     return eval_loss / len(dataloader)
 
+
 """## Train function"""
 
+
 def train(
-    model: nn.Module,
-    trainloader: DataLoader,
-    validloader: DataLoader,
-    num_epochs: int,
-    criterion,
-    optimizer,
-    device: torch.device,
-    train_log_frequency: int,
-    val_log_frequency: int,
-    eval_epoch_frequency: int,
-    encoder_name: str
+        model: nn.Module,
+        trainloader: DataLoader,
+        validloader: DataLoader,
+        num_epochs: int,
+        criterion,
+        optimizer,
+        device: torch.device,
+        train_log_frequency: int,
+        val_log_frequency: int,
+        eval_epoch_frequency: int,
+        encoder_name: str
 ):
     train_losses = []
     val_losses = []
@@ -92,7 +96,7 @@ def train(
             text = torch.vstack(batch["sentence1"]).permute(1, 0).float()
             tag = torch.vstack(batch["sentence2"]).permute(1, 0).float()
             label = batch["score"].unsqueeze(1).float()
-            
+
             input = torch.hstack((text, tag)).to(device)
             label[label < 0] = 0
             label = label.to(device)
@@ -106,7 +110,7 @@ def train(
             train_loss += loss.item()
 
             if (steps + 1) % train_log_frequency == 0:
-                print(f"Epoch {epoch+1}, Iteration {steps+1}, Loss: {train_loss / (steps + 1)}")
+                print(f"Epoch {epoch + 1}, Iteration {steps + 1}, Loss: {train_loss / (steps + 1)}")
 
             steps += 1
 
@@ -124,9 +128,11 @@ def train(
         print("--------------------------------------------------")
 
         if val_loss <= min(val_losses):
+            os.makedirs("models/mlp", exist_ok=True)
             torch.save(model.state_dict(), f"models/mlp/{encoder_name}.pth")
 
     return train_losses, val_losses
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Binary MLP")
@@ -172,8 +178,8 @@ if __name__ == "__main__":
 
     # ---- Get embeddings ----
     print("Getting embeddings...")
-    train_dataset_embedding = get_embeddings(f"{args.model_name}/train_embeddings.pt", encoder, train_dataset, device)
-    eval_dataset_embedding = get_embeddings(f"{args.model_name}/eval_embeddings.pt", encoder, eval_dataset, device)
+    train_dataset_embedding = get_embeddings(f"embeddings/{args.model_name}_train_embeddings.pt", encoder, train_dataset, device)
+    eval_dataset_embedding = get_embeddings(f"embeddings/{args.model_name}_eval_embeddings.pt", encoder, eval_dataset, device)
     print("Embeddings obtained.")
 
     # ---- Adding a MLP on top of the embeddings ----
@@ -213,7 +219,6 @@ if __name__ == "__main__":
     plt.title("Training and Validation Loss")
     plt.legend()
     plt.show()
-    
 
     '''
     """## Resource utilization

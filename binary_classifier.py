@@ -1,6 +1,5 @@
 import torch.nn as nn
 
-"""## Model"""
 class BinaryClassifier(nn.Module):
     def __init__(self, in_features, hidden_dims):
         super(BinaryClassifier, self).__init__()
