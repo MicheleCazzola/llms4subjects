@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from sentence_transformers import SentenceTransformer
 from datasets import Dataset
 import os
@@ -32,16 +33,15 @@ def get_embeddings(embedding_file: str, encoder: SentenceTransformer, data, devi
     return embedding_dataset
 
 
-"""## Evaluate function"""
-
-
-def evaluate(
-        model: nn.Module,
-        dataloader: DataLoader,
-        criterion,
-        device: torch.device,
-        log_frequency: int
-):
+def evaluate(model: nn.Module, dataloader: DataLoader, criterion, device: torch.device, log_frequency: int):
+    """ Evaluate the model on the given dataset
+    :param model: Model to evaluate
+    :param dataloader: DataLoader for the evaluation dataset
+    :param criterion: Loss function
+    :param device: Device to run the evaluation on ('cuda' or 'cpu')
+    :param log_frequency: Frequency to log the evaluation loss
+    :return: Average loss on the evaluation dataset
+    """
     model.eval()
     steps = 0
     eval_loss = 0
@@ -68,9 +68,6 @@ def evaluate(
     return eval_loss / len(dataloader)
 
 
-"""## Train function"""
-
-
 def train(
         model: nn.Module,
         trainloader: DataLoader,
@@ -82,8 +79,10 @@ def train(
         train_log_frequency: int,
         val_log_frequency: int,
         eval_epoch_frequency: int,
-        encoder_name: str
+        encoder_name: str,
+        scheduler=None
 ):
+    """ Train the model """
     train_losses = []
     val_losses = []
     for epoch in range(num_epochs):
@@ -121,7 +120,7 @@ def train(
             val_losses.append(val_loss)
 
         if (epoch + 1) % eval_epoch_frequency == 0:
-            print(f"End of epoch {epoch + 1}, Training loss: {train_losses[-1]}, Validation Loss: {val_losses[-1]}")
+            print(f"End of epoch {epoch + 1}, Training loss: {train_losses[-1]}, Validation Loss: {val_losses[-1]}" + (f", LR: {scheduler.get_last_lr()[0]}" if scheduler else ""))
         else:
             print(f"End of epoch {epoch + 1}, Training loss: {train_losses[-1]}")
         print("--------------------------------------------------")
@@ -129,6 +128,9 @@ def train(
         if val_loss <= min(val_losses):
             os.makedirs("models/mlp", exist_ok=True)
             torch.save(model.state_dict(), f"models/mlp/{encoder_name}.pth")
+
+        if scheduler is not None:
+            scheduler.step()
 
     return train_losses, val_losses
 
@@ -188,7 +190,8 @@ if __name__ == "__main__":
     hidden_dimensions = [2 * IN_FEATURES, 2048, 1024]
     model = BinaryClassifier(IN_FEATURES, hidden_dimensions)
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, weight_decay=1e-4, momentum=0.9)
+    # scheduler = CosineAnnealingLR(optimizer, T_max=args.num_epochs)
     model.to(device)
 
     trainloader = DataLoader(train_dataset_embedding, batch_size=args.batch_size, shuffle=True)
@@ -205,7 +208,8 @@ if __name__ == "__main__":
         train_log_frequency=2000,
         val_log_frequency=500,
         eval_epoch_frequency=1,
-        encoder_name=args.model_name
+        encoder_name=args.model_name,
+        # scheduler=scheduler
     )
 
     plt.figure()
@@ -250,7 +254,7 @@ if __name__ == "__main__":
     """### FLOPS"""
 
     from fvcore.nn import FlopCountAnalysis
-import wandb
+    import wandb
 
     flops = FlopCountAnalysis(model, x)
     print(flops.total())'''

@@ -234,9 +234,19 @@ def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K, re
     else:
         doc_embeddings = torch.load(doc_embeddings_filename)
 
+    # Load MLP model if provided
+    if mlp_model:
+        # Load the MLP model
+        state_dict = torch.load(mlp_model, map_location=DEVICE)
+        IN_FEATURES = tag_embeddings.shape[1] * 2
+        hidden_dimensions = [2 * IN_FEATURES, 2048, 1024]
+        mlp = BinaryClassifier(IN_FEATURES, hidden_dimensions).to(DEVICE)
+        mlp.load_state_dict(state_dict)
+        mlp.eval()
+
     for doc_file, doc_embedding in tqdm(list(zip(doc_files, doc_embeddings)), desc="Tagging documents"):
 
-        if mlp_model == '':
+        if mlp_model == '':  # Use Cosine Similarity
             # Compute cosine similarity between the document and all tag embeddings
             cos_scores = util.cos_sim(doc_embedding, tag_embeddings)[0]
 
@@ -245,20 +255,13 @@ def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K, re
 
             # Sort them by similarity score
             top_results = top_results[torch.argsort(-cos_scores[top_results])]
-        else:
-            # Load the MLP model
-            state_dict = torch.load(mlp_model, map_location=DEVICE)
-            IN_FEATURES = tag_embeddings.shape[1] * 2
-            hidden_dimensions = [2 * IN_FEATURES, 2048, 1024]
-            mlp = BinaryClassifier(IN_FEATURES, hidden_dimensions).to(DEVICE)
-            mlp.load_state_dict(state_dict)
-            mlp.eval()
 
-            # Compute the MLP model output
+        else:  # Compute the MLP model output
             with torch.no_grad():
-                input = torch.hstack((doc_embedding.repeat(tag_embeddings.shape[0], 1), tag_embeddings))
-                scores = mlp(input)
+                mlp_input = torch.hstack((doc_embedding.repeat(tag_embeddings.shape[0], 1), tag_embeddings))
+                scores = mlp(mlp_input)
             scores = scores.squeeze(1)
+
             # Get the top_k tags (indices)
             top_results = torch.topk(scores, top_k).indices
 
