@@ -239,7 +239,7 @@ def tag_documents(model, tag_ids, tag_embeddings, test_docs_dir, top_k=TOP_K, re
         # Load the MLP model
         state_dict = torch.load(mlp_model, map_location=DEVICE)
         IN_FEATURES = tag_embeddings.shape[1] * 2
-        hidden_dimensions = [2 * IN_FEATURES, 2048, 1024]
+        hidden_dimensions = [2 * IN_FEATURES, 1024]
         mlp = BinaryClassifier(IN_FEATURES, hidden_dimensions).to(DEVICE)
         mlp.load_state_dict(state_dict)
         mlp.eval()

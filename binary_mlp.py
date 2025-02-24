@@ -187,7 +187,7 @@ if __name__ == "__main__":
     EMBEDDING_DIM = encoder.get_sentence_embedding_dimension()
     IN_FEATURES = EMBEDDING_DIM * 2
 
-    hidden_dimensions = [2 * IN_FEATURES, 2048, 1024]
+    hidden_dimensions = [2 * IN_FEATURES, 1024]
     model = BinaryClassifier(IN_FEATURES, hidden_dimensions)
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, weight_decay=1e-4, momentum=0.9)

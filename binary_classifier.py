@@ -12,7 +12,7 @@ class BinaryClassifier(nn.Module):
         self.input = nn.Sequential(
             nn.Linear(in_features, hidden_dims[0]),
             nn.ReLU(),
-            nn.Dropout(0.2)
+            nn.Dropout(0.5)
         )
         init.kaiming_normal_(self.input[0].weight)
 
@@ -21,7 +21,7 @@ class BinaryClassifier(nn.Module):
             layer = nn.Sequential(
                 nn.Linear(prev, curr),
                 nn.ReLU(),
-                nn.Dropout(0.2)
+                nn.Dropout(0.5)
             )
             init.kaiming_normal_(layer[0].weight)
             layers_list.append(layer)

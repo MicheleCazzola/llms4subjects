@@ -53,7 +53,7 @@ plt.savefig('images/finetuned_metrics.svg')
 plt.savefig('images/finetuned_metrics.jpg')
 #plt.show()
 
-mlp_files = [file for file in excel_files if 'mlp' in os.path.basename(file)]
+mlp_files = [file for file in excel_files if 'mlp' in os.path.basename(file) and 'ignore' not in os.path.basename(file)]
 
 fig, axs = plt.subplots(1, 3, figsize=(18, 6))
 
@@ -67,13 +67,13 @@ for ax, metric, title, y_label in zip(axs, metrics, titles, y_labels):
         ax.set_xticks(range(len(selected.columns)))
         ax.set_xticklabels([col.split("_")[-1] for col in selected.columns])
 
-        baseline = [file for file in excel_files if model in os.path.basename(file) and 
-                'mlp' not in os.path.basename(file) and 'finetuned' not in os.path.basename(file)][0]
-        # Plot baseline
-        df_baseline = pd.read_excel(baseline)
-        metric_columns_baseline = [col for col in df_baseline.columns if metric in col]
-        selected_baseline = df_baseline[df_baseline.iloc[:, 0] == 'Overall'][metric_columns_baseline]
-        ax.plot(selected_baseline.columns, selected_baseline.values[0] * 100, 's', label=f'{model} with CosSim', linestyle='solid', linewidth=1)  # Plot singular points with square marker and dashed line
+    baseline = [file for file in excel_files if model in os.path.basename(file) and 
+            'mlp' not in os.path.basename(file) and 'finetuned' not in os.path.basename(file)][0]
+    # Plot baseline
+    df_baseline = pd.read_excel(baseline)
+    metric_columns_baseline = [col for col in df_baseline.columns if metric in col]
+    selected_baseline = df_baseline[df_baseline.iloc[:, 0] == 'Overall'][metric_columns_baseline]
+    ax.plot(selected_baseline.columns, selected_baseline.values[0] * 100, 's', label=f'{model} with CosSim', linestyle='solid', linewidth=1)  # Plot singular points with square marker and dashed line
     
     ax.legend()
     ax.set_title(title)
