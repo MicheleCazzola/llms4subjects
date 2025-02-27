@@ -14,7 +14,7 @@ for root, dirs, files in os.walk(directory_path):
 
 
 # Filter files containing 'finetuned' in the name
-finetuned_files = [file for file in excel_files if 'finetuned' in os.path.basename(file)]
+finetuned_files = [file for file in excel_files if 'finetuned' in os.path.basename(file) and 'ignore' not in os.path.basename(file)]
 
 # Print the filtered list of files
 metrics = ['precision', 'recall', 'f1']
@@ -47,7 +47,7 @@ for ax, metric, title, y_label in zip(axs, metrics, titles, y_labels):
     ax.set_xlabel('k')
     ax.set_ylabel(y_label)
     ax.grid(True, linestyle='solid', alpha=0.5)
-    fig.suptitle(f'Performance Metrics for finetuned {model} with different losses', fontsize=16)
+    #fig.suptitle(f'Performance Metrics for finetuned {model} with different losses', fontsize=16)
 plt.tight_layout()
 plt.savefig('images/finetuned_metrics.svg')
 plt.savefig('images/finetuned_metrics.jpg')
@@ -80,13 +80,13 @@ for ax, metric, title, y_label in zip(axs, metrics, titles, y_labels):
     ax.set_xlabel('k')
     ax.set_ylabel(y_label)
     ax.grid(True, linestyle='solid', alpha=0.5)
-    fig.suptitle('Performance Metrics using MLP', fontsize=16)
+    #fig.suptitle('Performance Metrics using MLP', fontsize=16)
 plt.tight_layout()
 plt.savefig('images/mlp_metrics.svg')
 plt.savefig('images/mlp_metrics.jpg')
 #plt.show()
 
-other_files = [file for file in excel_files if file not in finetuned_files and file not in mlp_files]
+other_files = [file for file in excel_files if file not in finetuned_files and file not in mlp_files and 'ignore' not in os.path.basename(file)]
 fig, axs = plt.subplots(1, 3, figsize=(18, 6))
 
 for ax, metric, title, y_label in zip(axs, metrics, titles, y_labels):
@@ -104,7 +104,7 @@ for ax, metric, title, y_label in zip(axs, metrics, titles, y_labels):
     ax.set_xlabel('k')
     ax.set_ylabel(y_label)
     ax.grid(True, linestyle='solid', alpha=0.5)
-    fig.suptitle('Performance Metrics using Cosine Similarity', fontsize=16)
+    #fig.suptitle('Performance Metrics using Cosine Similarity', fontsize=16)
 plt.tight_layout()
 plt.savefig('images/cosine_similarity_metrics.svg')
 plt.savefig('images/cosine_similarity_metrics.jpg')
