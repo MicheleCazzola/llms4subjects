@@ -1,45 +1,43 @@
-# 🚀 Welcome to the LLMs4Subjects 📚 SemEval 2025 Shared Task Dataset Repository!
+# Our solution to LLMs4Subjects (SemEval'25 task #5) 🚀
+This repo contains both files from LLMs4Subjects' original repository and our files 📂
 
-## 💡 About
+## Our approach
+We explore three different approaches of increasing complexity:
 
-The **LLMs4Subjects** shared task invites the research community 🤝 to develop cutting-edge, LLM-based semantic solutions for automated subject indexing 📑 of [TIB](https://www.tib.eu/en/)—the German National Library of Science and Technology’s ever-growing collection of technical records in various natural languages. This task, also known as subject tagging or subject classification, leverages the [GND](https://www.dnb.de/EN/Professionell/Standardisierung/GND/gnd_node.html) (Gemeinsame Normdatei in German or Integrated Authority File in English), an international authority file primarily used by German-speaking libraries to catalog and link information on people, organizations, topics, and works.
+1. **Embedding-based retrieval**: Generate embeddings for both documents and tags using an encoder LLM, compute cosine similarity, and assign the top-k highest scoring tags. 🧩
 
+2. **Fine-tuned embedding model**: Fine-tune a transformer-based encoder and apply the previous embedding-based retrieval approach. 🔧
 
-To support the development of systems for the **LLMs4Subjects** shared task, we provide participants with two types of datasets:
+3. **Binary classification model**: Train a binary MLP that, given a document and a tag, predicts a similarity score, then selects the top-k highest scoring tags. 🧠
 
-1. **Curated, human-readable form of the GND subjects taxonomy.**
-2. **A large-scale dataset of technical records from TIB’s open-access collection, annotated with GND subjects, available in both English and German.**
+## Repository Structure 🗂️
+In the following, we'll report only the files we created/modified:
 
-Although TIB’s technical records span multiple languages, this shared task focuses on the most representative collections in English and German. We have utilized the TIB's open-access catalog of technical records (https://www.tib.eu/en/services/open-data), known as TIBKAT, and restricted it to records that include abstract metadata. This collection can be dynamically browsed on the TIB portal [here](https://www.tib.eu/en/search?tx_tibsearch_search%5Baction%5D=search&tx_tibsearch_search%5Bcnt%5D=20&tx_tibsearch_search%5Bcontroller%5D=Search&tx_tibsearch_search%5BgroupField%5D=matchTitleTypeFirstAuthor_str&tx_tibsearch_search%5Bpg%5D=1&tx_tibsearch_search%5Bquery%5D=prefix%3Atibkat%20%2Babstract%3A%2A%20%2BxmlPath%3Asubject%2F%40type%3Dgnd&cHash=f451c3e5094da4379c764584d10afc8d). While the overall collection includes various types of technical records, this shared task focuses on the most representative types: `article`, `book`, `conference`, `report`, and `thesis`. Therefore, the official shared task dataset comprises only records of these five types.
+```
+├── images/                          # Directory containing images used in the project 🖼️
+├── results/                         # Directory where results are stored 📊
+├── main.ipynb                       # Main Jupyter notebook for running experiments 📓
+├── embedding_similarity_tagging.py  # Script for tagging using embedding similarity 🏷️
+├── finetune_sentence_transformer.py # Script for fine-tuning a sentence transformer model 🔧
+├── binary_classifier.py             # Script for defining the multi-layer perceptron 🧠
+├── binary_mlp.py                    # Script for training the multi-layer perceptron 🏋️
+├── performances.py                  # Script for evaluating model performances 📈
+├── plots.py                         # Script for generating plots 📉
+├── README.md                        # Project documentation 📃
+├── requirements.txt                 # List of dependencies required for the project 📋
+```
 
-For the convenience of our participants, both the GND and the TIBKAT datasets have been reorganized, appropriately formatted with human-readable tags, and released as the official shared task dataset in this repository. We recognize that standardized library taxonomies and collections often refer to age-old identifier mechanisms and are filled with codes. Processing and interpreting these codes can be time-consuming ⏳. Therefore, in consultation with TIB subject matter experts, we have preprocessed both the GND and TIBKAT datasets, converting their fine-grained coding into human-readable formats. This should help the **LLMs4Subjects** participants download the relevant data and get started right away.
-
-This shared task offers the research community an opportunity to creatively develop LLMs 🧠 for subject tagging 📑 of technical records 📚 based on the GND taxonomy. Systems need to demonstrate bilingual language modeling 🌍 by processing technical records in both German and English. Moreover, successful solutions may be integrated directly into the operational workflows of the TIB Leibniz Information Centre for Science and Technology University Library 🏛️.
-
-
-## 📂 Repositories Included
-
-- [**shared-task-datasets**](https://github.com/jd-coderepos/llms4subjects/tree/main/shared-task-datasets): This subfolder includes the human-readable formatted GND subjects taxonomy and the training and development sets for the TIBKAT records. Participants in the **LLMs4Subjects** shared task are requested to download the relevant files from this folder for system development.
-
-- [**supplementary-datasets**](https://github.com/jd-coderepos/llms4subjects/tree/main/supplementary-datasets): This subfolder includes all excluded data from the open-access GND and TIBKAT datasets that are not part of the **LLMs4Subjects** shared task. For instance, this may include records from TIBKAT in languages other than English or German or records where a specific record type is too sparse. Although not part of the official shared task, these records are available for participants to use as needed.
-
-- [**shared-task-eval-script**](https://github.com/jd-coderepos/llms4subjects/tree/main/shared-task-eval-script): This subfolder contains the official evaluation script used to generate the quantitative evaluation results for **LLMs4Subjects** participant team submissions.
-
-## 📧 Contact
-
-llms4subjects [at] gmail.com
-
-## ⭐ Acknowledgements
-
-The **LLMs4Subjects** shared task, organized as SemEval 2025 Task 5, is jointly supported by the [SCINEXT project](https://scinext-project.github.io/) (BMBF, German Federal Ministry of Education and Research, Grant ID: 01lS22070) and the [NFDI4DataScience initiative](https://www.nfdi4datascience.de/) (DFG, German Research Foundation, Grant ID: 460234259).
-
-
-This work is licensed under a
-[Creative Commons Attribution-ShareAlike 4.0 International License][cc-by-sa].
-
-[![CC BY-SA 4.0][cc-by-sa-image]][cc-by-sa]
-
-[cc-by-sa]: http://creativecommons.org/licenses/by-sa/4.0/
-[cc-by-sa-image]: https://licensebuttons.net/l/by-sa/4.0/88x31.png
-[cc-by-sa-shield]: https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg
-
+## Best results obtained 🏆
+The best results are obtained by fine-tuning for three epochs using MultipleNegativesRankingLoss 🔄
+| k  | Precision (%) | Recall (%) | F1 Score (%) |
+|----|---------------|------------|--------------|
+| 5  | 9.74          | 21.70      | 13.28        |
+| 10 | 6.30          | 27.12      | 10.14        |
+| 15 | 4.73          | 29.75      | 8.11         |
+| 20 | 3.87          | 32.16      | 6.88         |
+| 25 | 3.30          | 33.89      | 5.98         |
+| 30 | 2.91          | 35.68      | 5.36         |
+| 35 | 2.61          | 36.99      | 4.86         |
+| 40 | 2.36          | 37.83      | 4.43         |
+| 45 | 2.16          | 38.92      | 4.08         |
+| 50 | 1.99          | 39.76      | 3.87         |
