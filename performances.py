@@ -8,8 +8,7 @@ def get_performance(model):
     ### Latency
     """
 
-
-    STEPS = 10
+    STEPS = 10_000
     x = """
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer metus massa, aliquam vitae nibh a, pellentesque hendrerit tellus. Praesent interdum, magna quis gravida congue, leo dui dapibus tortor, eget consectetur magna quam eu libero. Vestibulum iaculis, mauris non pulvinar tempor, diam quam molestie erat, nec fermentum magna orci vitae nisi. Aliquam vestibulum non lectus ut lacinia. Nulla fermentum sapien eget pellentesque eleifend. Phasellus mauris neque, congue nec magna ac, dictum laoreet leo. Suspendisse potenti. Proin eu mauris sem. Pellentesque mattis fermentum dui congue mattis. Aenean leo sem, tempor ac malesuada a, placerat non dui. Ut vulputate venenatis sem eu tristique.
         Proin auctor mi libero, vel varius lectus consectetur eu. Aliquam porttitor, libero id posuere venenatis, lacus neque elementum nibh, et fringilla purus lacus vel quam. Pellentesque egestas dolor ligula, vitae eleifend urna finibus nec. Cras malesuada nibh urna. Pellentesque tincidunt urna quis turpis venenatis facilisis. Mauris sit amet ipsum mi. Aliquam sit amet ex id odio cursus gravida. Curabitur efficitur arcu molestie mauris varius, eget consequat nibh aliquam. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Quisque ac ipsum in velit efficitur pulvinar. Morbi condimentum tempor ultricies. In vel vulputate justo. Donec lobortis accumsan odio in molestie."""
@@ -33,7 +32,6 @@ def get_performance(model):
     params = sum(p.numel() for p in model.parameters())
     print("Params:", params)
 
-    """### FLOPs"""
 
 if __name__ == '__main__':
 
