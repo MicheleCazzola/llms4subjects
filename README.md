@@ -1,6 +1,17 @@
 # Our solution to LLMs4Subjects (SemEval'25 task #5) 🚀
 This repo contains both files from LLMs4Subjects' original repository and our files 📂
 
+## Authors
+- [Vincenzo Avantaggiato](https://github.com/VincenzoAvantaggiato)
+- [Michele Cazzola](https://github.com/MicheleCazzola)
+- [Andrea Delli](https://github.com/RonPlusSign)
+
+## General information
+**Course**: `Large Language Models` (`Polytechnic of Turin`)  
+**Academic Year**: 2024-25. Developed between January and February 2025.  
+**Teachers**: Flavio Giobergia, Riccardo Coppola.  
+**Topic**: development of a LLM-based method to perform authomatic subject tagging of technical documents from Leibniz University’s Technical Library (TIBKAT).  
+
 ## Our approach
 We explore three different approaches of increasing complexity:
 
